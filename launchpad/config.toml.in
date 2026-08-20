@@ -1,0 +1,44 @@
+# ESP Launchpad configuration — flash this project from a browser.
+#
+# Template. `scripts/build_launchpad.sh` substitutes @BASE_URL@ and writes the
+# result to dist/launchpad/config.toml — don't edit the generated copy.
+#
+# Schema: https://github.com/espressif/esp-launchpad
+# Each image is a single merged flash image written at offset 0x0, produced by
+# `idf.py merge-bin`. Because merge-bin pads the gaps with 0xFF, flashing also
+# clears NVS — which is what you want before commissioning onto a Matter fabric.
+
+esp_toml_version = 1.0
+firmware_images_url = "@BASE_URL@"
+config_readme_url = "@BASE_URL@readme-intro.md"
+
+supported_apps = ["matter_display", "s3_weather", "h2_matter"]
+
+# ── The display — Waveshare ESP32-C6-Touch-AMOLED-1.8 ────────────────────────
+[matter_display]
+chipsets = ["ESP32C6"]
+image.esp32c6 = "matter_display.bin"
+description = "Matter-over-Thread touch display. Controls lights and shows sensors, weather and a clock."
+readme.text = "@BASE_URL@postflash-display.md"
+# esp-matter's default test commissioning payload (discriminator 3840, passcode
+# 20202021). The display also shows its own QR on screen, so that's the one to
+# trust if a build ever changes the VID/PID.
+setup_payload = "MT:Y.K9042C00KA0648G00"
+console_baudrate = 115200
+
+# ── Weather device, Wi-Fi half — ESP32-S3 on the Thread Border Router board ──
+[s3_weather]
+chipsets = ["ESP32S3"]
+image.esp32s3 = "s3_weather.bin"
+description = "Weather front end: fetches the forecast from Open-Meteo over Wi-Fi and feeds the H2 over UART. Configured from the Console tab."
+readme.text = "@BASE_URL@postflash-s3.md"
+console_baudrate = 115200
+
+# ── Weather device, Matter half — ESP32-H2 on the same board ─────────────────
+[h2_matter]
+chipsets = ["ESP32H2"]
+image.esp32h2 = "h2_matter.bin"
+description = "Weather device as a Matter-over-Thread aggregator with three temperature endpoints. Commission this one, then bind the display to it."
+readme.text = "@BASE_URL@postflash-h2.md"
+setup_payload = "MT:Y.K9042C00KA0648G00"
+console_baudrate = 115200

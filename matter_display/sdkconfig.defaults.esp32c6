@@ -1,0 +1,133 @@
+CONFIG_IDF_TARGET="esp32c6"
+
+# ESP32-C6-DevKitM-1 Settings
+# Buttons (BOOT button on the Waveshare board is also GPIO9)
+CONFIG_BSP_BUTTONS_NUM=1
+CONFIG_BSP_BUTTON_1_TYPE_GPIO=y
+CONFIG_BSP_BUTTON_1_GPIO=9
+CONFIG_BSP_BUTTON_1_LEVEL=0
+
+# The Waveshare board has 16 MB flash (XM25QH128); the DevKit default is 4 MB.
+# Use it with a larger partition table so Matter + the LVGL display UI fits.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# --- Performance ---
+# -O2, not -Og: LVGL's renderer is pure C blend loops on a single 160 MHz core, so the debug
+# optimization level was the largest single CPU cost on the device.
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# Keep assertions (a failed invariant should still panic-reboot) but drop their message strings.
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+# Quad-IO flash: everything executes XIP through the C6's small cache and the working set is large
+# (LVGL + three ~100 KB fonts + weather icons + Matter), so cache-miss stalls dominate.
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+
+# Compile INFO logs out of the image entirely (WARN and above still print). The console TX is a
+# busy-wait at 115200 baud, so each log line costs real CPU time.
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+CONFIG_OPENTHREAD_LOG_LEVEL_WARN=y
+# The Matter shell (a resident task plus a UART reader) is unused here.
+# CONFIG_ENABLE_CHIP_SHELL is not set
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_c6.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions_c6.csv"
+
+# --- Memory-footprint parity (pinned) ---
+# Both of these are IDF-version-dependent defaults that a newer IDF flips the other way, and each
+# costs IRAM — together ~900 bytes of DIRAM, which comes out of the heap. Pinned so a fresh clone
+# links with the same footprint this firmware was validated at instead of drifting with the
+# toolchain version. Matter + BLE + Thread + an 80 KB LVGL pool doesn't leave much to spare.
+# Share mbedTLS with the rest of the system instead of linking NimBLE's own TinyCrypt.
+CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS=y
+# Keep the libc misaligned-access helper out of IRAM.
+CONFIG_LIBC_OPTIMIZED_MISALIGNED_ACCESS=n
+
+# --- Waveshare ESP32-C6-Touch-AMOLED-1.8 display UI ---
+# Project-level CHIP config overrides (raises CHIP_CONFIG_DEVICE_MAX_ACTIVE_CASE_CLIENTS
+# from 2 to 6 so all bound sensor nodes can establish CASE sessions in parallel at boot).
+CONFIG_CHIP_PROJECT_CONFIG="main/CHIPProjectConfig.h"
+
+# Don't resume persisted subscriptions on reboot: the app re-subscribes to every bound sensor
+# itself, and resumed sessions would compete with those connects for the CASE slots at boot.
+# CONFIG_ENABLE_PERSIST_SUBSCRIPTIONS is not set
+
+# LVGL configuration for the SH8601 QSPI AMOLED
+CONFIG_LV_COLOR_16_SWAP=y
+CONFIG_LV_MEM_SIZE_KILOBYTES=80
+# Large font used for the bulb's power-symbol / ON-OFF label
+CONFIG_LV_FONT_MONTSERRAT_48=y
+# Medium regular-weight fonts for card location/condition labels (brutalist redesign)
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_18=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+# Symbols on the settings stepper buttons and the alert / confirm overlays
+CONFIG_LV_FONT_MONTSERRAT_28=y
+# QR code widget for the Matter pairing screen
+CONFIG_LV_USE_QRCODE=y
+# Multi-stop gradients for the rainbow hue slider
+CONFIG_LV_GRADIENT_MAX_STOPS=8
+# Misnamed CHIP option: it starts no SNTP client (there is no route to one on Thread) — it is the
+# #ifdef around ClockImpl::GetClock_RealTime(), i.e. whether CHIP has a wall clock at all. Required
+# for the TimeSynchronization cluster and the controller's SetUTCTime push that drive the Home clock.
+CONFIG_ENABLE_SNTP_TIME_SYNC=y
+
+# --- Matter over Thread — Minimal End Device (MTD) ---
+# A leaf end device, not a router: this is a small display, so it doesn't take on router/CPU
+# overhead. Sleepy behaviour is configured by the ICD block further down.
+CONFIG_ENABLE_WIFI_STATION=n
+CONFIG_OPENTHREAD_ENABLED=y
+CONFIG_OPENTHREAD_SRP_CLIENT=y
+CONFIG_OPENTHREAD_MTD=y
+CONFIG_OPENTHREAD_CLI=n
+CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC=n
+
+# Thread is IPv6-only
+CONFIG_LWIP_IPV6_AUTOCONFIG=n
+CONFIG_LWIP_IPV4=n
+CONFIG_DISABLE_IPV4=y
+CONFIG_LWIP_ND6=n
+CONFIG_LWIP_IPV6_NUM_ADDRESSES=8
+CONFIG_LWIP_MULTICAST_PING=y
+CONFIG_USE_MINIMAL_MDNS=n
+CONFIG_MBEDTLS_SSL_PROTO_DTLS=y
+
+# --- Matter ICD (Intermittently Connected Device) + light sleep ---
+# With the screen off the board otherwise draws ~88 mA, and almost all of that is the 802.15.4
+# receiver, which a non-sleepy Thread device keeps powered continuously. As an ICD the radio is
+# duty-cycled: it sleeps and polls its Thread parent instead of listening all the time.
+#
+# The trade-off is receive latency while idle. Outgoing commands (toggling a light) are unaffected
+# — sleepy applies to RX — but incoming attribute reports and alerts only arrive when the device
+# polls. ICD_SLOW_POLL_INTERVAL_MS sets that floor, so a contact/leak alert can be delayed by up to
+# that long while the screen is off.
+
+# ICD server: Short Idle Time (SIT) device.
+CONFIG_ENABLE_ICD_SERVER=y
+# Idle mode (screen off): poll the parent this often. This is also the worst-case delay on an
+# incoming alert — lower it if that matters more than the power.
+CONFIG_ICD_SLOW_POLL_INTERVAL_MS=5000
+# Active mode (screen on / recent network activity): poll fast so the UI feels live.
+CONFIG_ICD_FAST_POLL_INTERVAL_MS=500
+CONFIG_ICD_IDLE_MODE_INTERVAL_SEC=60
+CONFIG_ICD_ACTIVE_MODE_INTERVAL_MS=1000
+CONFIG_ICD_ACTIVE_MODE_THRESHOLD_MS=1000
+
+# CPU / peripheral power management. Light sleep is only reachable while the screen is off:
+# light_ui.cpp holds an ESP_PM_NO_LIGHT_SLEEP lock the whole time the display is on, and the LVGL
+# task backs its poll off from 10 ms to 100 ms once asleep (a 10 ms poll never lets the tickless
+# idle run long enough to be worth entering sleep).
+CONFIG_PM_ENABLE=y
+CONFIG_PM_DFS_INIT_AUTO=y
+# Peripheral power-down in light sleep is deliberately OFF. It saves a little more, but it takes
+# the digital GPIO wake source with it ("GPIO wakeup source is not available if the peripheral
+# power domain is powered down in sleep"), and the touch INT is GPIO15 — not one of the C6's LP
+# IOs (GPIO0-7), so there is no RTC wake path for it either. Without this, a tap can only be
+# noticed at the next 100 ms poll, by which point the FT3168's INT pulse is often over.
+# CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP is not set
+CONFIG_ESP_SLEEP_POWER_DOWN_FLASH=y
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y
+
+# Radio sleep.
+CONFIG_IEEE802154_SLEEP_ENABLE=y
+CONFIG_ESP_PHY_MAC_BB_PD=y
+CONFIG_BT_LE_SLEEP_ENABLE=y

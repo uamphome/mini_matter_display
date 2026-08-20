@@ -1,0 +1,6 @@
+menu "Weather Device Configuration"
+
+    # Nothing to configure at build time: this device receives its readings from
+    # the S3 over UART (see app_main.cpp).
+
+endmenu

@@ -1,0 +1,19 @@
+idf_component_register(
+    SRCS
+        "src/amoled.c"
+        "src/amoled_touch.c"
+        "src/amoled_lvgl.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        driver
+        esp_driver_i2c
+        esp_lcd
+        esp_timer
+        freertos
+        heap
+        esp_io_expander_tca9554
+        esp_lcd_sh8601
+        esp_lcd_touch_ft5x06
+        lvgl
+)

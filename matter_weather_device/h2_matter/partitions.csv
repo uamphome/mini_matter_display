@@ -1,0 +1,9 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# TBR board's H2 has 2 MB flash — single factory app (no dual-OTA), OTA disabled.
+# Firmware partition offset must be 64K aligned; table lives at 0xC000.
+esp_secure_cert,  0x3F, ,0xd000,    0x2000, encrypted
+nvs,      data, nvs,     0x10000,   0xC000,
+nvs_keys, data, nvs_keys,,          0x1000, encrypted
+phy_init, data, phy,     ,          0x1000,
+factory,  app,  factory, 0x20000,   0x1C0000,
+fctry,    data, nvs,     0x1E0000,  0x6000

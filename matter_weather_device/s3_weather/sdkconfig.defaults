@@ -1,0 +1,19 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+# Custom partition table (bigger NVS for saved config).
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Wi-Fi station (the S3 owns Wi-Fi; the H2 owns Thread — no shared radio, no coex).
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
+
+# HTTPS to the Open-Meteo weather + geocoding APIs, validated against the bundle.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# The interactive "setup" TUI + logs share the USB-Serial-JTAG console.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# Larger main task stack for the TLS handshake + JSON parsing.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
